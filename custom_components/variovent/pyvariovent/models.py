@@ -94,7 +94,12 @@ class LG:
 class P:
     """Indices in LueftungsgeraetParameter (155 fields)."""
 
+    # settings of mode "feuchteabluft" (Short values, written as a group)
+    HUM_RISE = 13  # above this humidity the fan level is raised ...
+    HUM_FALL = 14  # ... until it drops below this value again
+    HUM_EXHAUST = 15  # above this: temporarily exhaust air at level 3
     FEUCHTEABLUFT_ACTIVE = 16
+    HUM_STEPS = 17  # ... by this many levels (1-3)
     MODE_SET = 26  # eingestellte Betriebsart (incl. 'wochenplan' / 'aus')
     MODE_PREVIOUS = 27
     MODE_ACTIVE = 28  # aktuell wirksame Betriebsart
@@ -150,6 +155,27 @@ def _temp(p: GwtObject, i: int, f: int) -> float | None:
         return None
     frac = max(0, min(99, frac or 0))
     return round(whole + (frac / 100 if whole >= 0 else -frac / 100), 1)
+
+
+@dataclass
+class HumiditySettings:
+    """Settings of the 'feuchteabluft' mode (same rules as the web UI)."""
+
+    rise: int  # % humidity above which the level is raised
+    fall: int  # % humidity below which the normal level returns
+    exhaust: int  # % humidity above which exhaust air (level 3) is used
+    steps: int  # levels added while humidity is high (1-3)
+
+    def validate(self) -> None:
+        for name in ("rise", "fall", "exhaust"):
+            if not 0 <= getattr(self, name) <= 100:
+                raise ValueError(f"{name} must be between 0 and 100 %")
+        if not 1 <= self.steps <= 3:
+            raise ValueError("steps must be between 1 and 3")
+        if self.rise <= self.fall:
+            raise ValueError("the 'raise above' value must be higher than the 'back below' value")
+        if self.exhaust <= self.rise:
+            raise ValueError("the 'exhaust above' value must be higher than the 'raise above' value")
 
 
 @dataclass
@@ -345,6 +371,27 @@ class Ventilator:
         if self.device_type is not None and mode not in self.allowed_modes:
             raise ValueError(f"mode {mode} is not available for {self.name} ({self.model})")
         self.params.fields[P.MODE_SET] = mode
+        return self.raw
+
+    # humidity mode settings -------------------------------------------------
+    @property
+    def humidity_settings(self) -> HumiditySettings:
+        return HumiditySettings(
+            rise=self.p(P.HUM_RISE),
+            fall=self.p(P.HUM_FALL),
+            exhaust=self.p(P.HUM_EXHAUST),
+            steps=self.p(P.HUM_STEPS),
+        )
+
+    def with_humidity_settings(self, settings: HumiditySettings) -> GwtObject:
+        settings.validate()
+        for idx, value in (
+            (P.HUM_RISE, settings.rise),
+            (P.HUM_FALL, settings.fall),
+            (P.HUM_EXHAUST, settings.exhaust),
+            (P.HUM_STEPS, settings.steps),
+        ):
+            self.params.fields[idx] = JShort(value)
         return self.raw
 
     def as_dict(self) -> dict[str, Any]:

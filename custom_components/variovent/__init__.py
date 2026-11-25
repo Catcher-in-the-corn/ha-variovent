@@ -17,7 +17,7 @@ from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
 from .coordinator import VarioventConfigEntry, VarioventCoordinator
 from .entity import spot_device_info
 
-PLATFORMS = [Platform.BINARY_SENSOR, Platform.FAN, Platform.SELECT, Platform.SENSOR]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.FAN, Platform.NUMBER, Platform.SELECT, Platform.SENSOR]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: VarioventConfigEntry) -> bool:

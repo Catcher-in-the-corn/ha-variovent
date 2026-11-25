@@ -137,6 +137,37 @@ async def test_modes_depend_on_device_type(hass: HomeAssistant, fake_spot) -> No
     assert not _sent(fake_spot.calls, MODE_UPDATE)
 
 
+def _entity_id(hass: HomeAssistant, domain: str, unique_id: str) -> str:
+    from homeassistant.helpers import entity_registry as er
+
+    entity_id = er.async_get(hass).async_get_entity_id(domain, DOMAIN, unique_id)
+    assert entity_id, unique_id
+    return entity_id
+
+
+async def test_humidity_mode_settings(hass: HomeAssistant, fake_spot) -> None:
+    await _setup(hass)
+    rise = _entity_id(hass, "number", "900000000001_humidity_rise")
+    fall = _entity_id(hass, "number", "900000000001_humidity_fall")
+    assert float(hass.states.get(rise).state) == 50  # values of the recorded fixture
+    assert float(hass.states.get(fall).state) == 45
+
+    fake_spot.calls.clear()
+    await hass.services.async_call("number", "set_value", {"entity_id": rise, "value": 60}, blocking=True)
+    call = next(c for c in fake_spot.calls if c[0] == "lueftungsgeraeteParameterBAEinstellungenUpdate")
+    params = call[1]
+    assert params[1][0].endswith("UserSession/2592594343")  # session is the 2nd parameter
+    assert params[2][1] == "feuchteabluft"
+    sent = params[0][1].items[0].fields[6].fields
+    assert (int(sent[13]), int(sent[14]), int(sent[15]), int(sent[17])) == (60, 45, 70, 1)
+
+    # "back below" must stay under "raise above": refused before anything is sent
+    fake_spot.calls.clear()
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call("number", "set_value", {"entity_id": fall, "value": 80}, blocking=True)
+    assert not [c for c in fake_spot.calls if c[0] == "lueftungsgeraeteParameterBAEinstellungenUpdate"]
+
+
 async def test_relogin_after_login_elsewhere(hass: HomeAssistant, fake_spot) -> None:
     """A login in the web UI invalidates our session; the next poll must recover."""
     entry = await _setup(hass)

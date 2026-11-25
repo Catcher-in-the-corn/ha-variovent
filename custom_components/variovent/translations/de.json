@@ -146,6 +146,20 @@
       "fault": {
         "name": "Störung"
       }
+    },
+    "number": {
+      "humidity_rise": {
+        "name": "Feuchte-Abluft: Stufe erhöhen ab"
+      },
+      "humidity_fall": {
+        "name": "Feuchte-Abluft: zurück unter"
+      },
+      "humidity_exhaust": {
+        "name": "Feuchte-Abluft: Fortluft ab"
+      },
+      "humidity_steps": {
+        "name": "Feuchte-Abluft: erhöhen um Stufen"
+      }
     }
   },
   "exceptions": {

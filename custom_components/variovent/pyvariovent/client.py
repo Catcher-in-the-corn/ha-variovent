@@ -23,7 +23,7 @@ from .gwt import (
 )
 from .gwt import unbox
 from .layouts import PKG
-from .models import R, OperatingMode, SpotData, SpotInfo, Ventilator
+from .models import R, HumiditySettings, OperatingMode, SpotData, SpotInfo, Ventilator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -105,14 +105,26 @@ class VarioventClient:
         except GwtError as err:
             raise VariventError(f"{method}: {err}") from err
 
-    async def call(self, method: str, *params: tuple[str, Any], session_last: bool = True) -> Any:
-        """Call a main-service method with the UserSession; re-login once if it expired."""
+    async def call(
+        self,
+        method: str,
+        *params: tuple[str, Any],
+        session_last: bool = True,
+        session_index: int | None = None,
+    ) -> Any:
+        """Call a main-service method with the UserSession; re-login once if it expired.
+
+        The session goes last (default), first (session_last=False) or at session_index.
+        """
         for attempt in (1, 2):
             if self.user_session is None:
                 await self.login()
             p = list(params)
             us = (SIG_USER_SESSION, self.user_session)
-            p = p + [us] if session_last else [us] + p
+            if session_index is not None:
+                p.insert(session_index, us)
+            else:
+                p = p + [us] if session_last else [us] + p
             result = await self.raw_call(MAIN_SERVICE, method, p)
             if isinstance(result, GwtObject) and result.name == "MyResult" and not result_ok(result):
                 # The spot allows one session per user: a login elsewhere (web UI, app)
@@ -257,6 +269,26 @@ class VarioventClient:
             v = await self._fresh(uid)
         await self.update_fan_level([v.with_fan_level(level)])
 
+    @property
+    def role(self) -> str | None:
+        """Role of the logged-in user, e.g. 'ADMINISTRATOR' or 'BENUTZER'."""
+        return self.user_session.fields[SESSION_ROLE] if self.user_session else None
+
+    @property
+    def can_change_mode_settings(self) -> bool:
+        """Only administrators / supervisors may change the settings of a mode."""
+        return self.role in ("ADMINISTRATOR", "SUPERVISOR")
+
+    async def set_humidity_settings(self, uid: int, settings: HumiditySettings) -> None:
+        """Save the settings of mode 'feuchteabluft' for one ventilator (admin only)."""
+        v = await self._fresh(uid)
+        await self.call(
+            "lueftungsgeraeteParameterBAEinstellungenUpdate",
+            (SIG_VECTOR, JList([v.with_humidity_settings(settings)])),
+            (SIG_STRING, str(OperatingMode.HUMIDITY)),
+            session_index=1,
+        )
+
     async def set_mode(self, uid: int, mode: str | OperatingMode) -> None:
         v = await self._fresh(uid)
         await self.update_mode([v.with_mode(str(mode))])
@@ -264,6 +296,7 @@ class VarioventClient:
 
 # ---------------------------------------------------------------------- helpers
 
+SESSION_ROLE = 19  # UserSession field: role of the user
 SESSION_RIGHTS = 20  # UserSession field holding the UserRechte object
 
 # MyResult field indices

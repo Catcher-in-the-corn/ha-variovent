@@ -146,6 +146,20 @@
       "fault": {
         "name": "Fault"
       }
+    },
+    "number": {
+      "humidity_rise": {
+        "name": "Humidity mode: raise level above"
+      },
+      "humidity_fall": {
+        "name": "Humidity mode: back to normal below"
+      },
+      "humidity_exhaust": {
+        "name": "Humidity mode: exhaust air above"
+      },
+      "humidity_steps": {
+        "name": "Humidity mode: raise level by"
+      }
     }
   },
   "exceptions": {
