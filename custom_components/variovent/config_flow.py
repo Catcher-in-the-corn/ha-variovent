@@ -36,8 +36,17 @@ async def _validate(hass, host: str, username: str, password: str) -> str:
     if not await client.ping():
         raise CannotConnect(host)
     await client.login()
-    await client.fetch_data()
-    return (await client.read_spot_info()).serial
+    data = await client.fetch_data()
+    try:
+        return (await client.read_spot_info()).serial
+    except VariventError as err:
+        # restricted users may not read the spot details; fall back to the
+        # lowest ventilator serial, which is just as stable for a given installation
+        _LOGGER.debug("spot serial not readable (%s), using ventilator serial", err)
+        serials = sorted(v.serial for v in data.ventilators.values())
+        if not serials:
+            raise
+        return serials[0]
 
 
 class VarioventConfigFlow(ConfigFlow, domain=DOMAIN):
