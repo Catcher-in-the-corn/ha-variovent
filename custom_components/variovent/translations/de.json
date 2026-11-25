@@ -159,6 +159,21 @@
       },
       "humidity_steps": {
         "name": "Feuchte-Abluft: erhöhen um Stufen"
+      },
+      "air_quality_rise": {
+        "name": "Luftgüte: Stufe erhöhen ab"
+      },
+      "air_quality_fall": {
+        "name": "Luftgüte: zurück unter"
+      },
+      "exhaust_humidity_fall": {
+        "name": "Fortluft: beenden unter Feuchte"
+      },
+      "party_duration": {
+        "name": "Party: Dauer"
+      },
+      "party_level": {
+        "name": "Party: Lüfterstufe"
       }
     }
   },

@@ -159,6 +159,21 @@
       },
       "humidity_steps": {
         "name": "Humidity mode: raise level by"
+      },
+      "air_quality_rise": {
+        "name": "Air quality mode: raise level above"
+      },
+      "air_quality_fall": {
+        "name": "Air quality mode: back to normal below"
+      },
+      "exhaust_humidity_fall": {
+        "name": "Exhaust air mode: leave below humidity"
+      },
+      "party_duration": {
+        "name": "Party mode: duration"
+      },
+      "party_level": {
+        "name": "Party mode: fan level"
       }
     }
   },

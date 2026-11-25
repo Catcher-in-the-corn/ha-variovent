@@ -1,62 +1,18 @@
-"""Number platform: settings of the operating mode "Feuchte-Abluft" (humidity extraction)."""
+"""Number platform: settings of the operating modes (as in the web UI's settings dialogs)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
-
-from homeassistant.components.number import NumberEntity, NumberEntityDescription, NumberMode
-from homeassistant.const import PERCENTAGE, EntityCategory
+from homeassistant.components.number import NumberEntity, NumberMode
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import VarioventConfigEntry, VarioventCoordinator
 from .entity import VarioventEntity
 from .helpers import async_write
-from .pyvariovent.models import HumiditySettings
+from .pyvariovent.models import ModeSetting
 
-
-@dataclass(frozen=True, kw_only=True)
-class HumidityNumberDescription(NumberEntityDescription):
-    field: str  # attribute of HumiditySettings
-
-
-HUMIDITY_NUMBERS = (
-    HumidityNumberDescription(
-        key="humidity_rise",
-        translation_key="humidity_rise",
-        field="rise",
-        native_min_value=0,
-        native_max_value=100,
-        native_step=1,
-        native_unit_of_measurement=PERCENTAGE,
-    ),
-    HumidityNumberDescription(
-        key="humidity_fall",
-        translation_key="humidity_fall",
-        field="fall",
-        native_min_value=0,
-        native_max_value=100,
-        native_step=1,
-        native_unit_of_measurement=PERCENTAGE,
-    ),
-    HumidityNumberDescription(
-        key="humidity_exhaust",
-        translation_key="humidity_exhaust",
-        field="exhaust",
-        native_min_value=0,
-        native_max_value=100,
-        native_step=1,
-        native_unit_of_measurement=PERCENTAGE,
-    ),
-    HumidityNumberDescription(
-        key="humidity_steps",
-        translation_key="humidity_steps",
-        field="steps",
-        native_min_value=1,
-        native_max_value=3,
-        native_step=1,
-    ),
-)
+UNITS = {"%": PERCENTAGE, "h": UnitOfTime.HOURS}
 
 
 async def async_setup_entry(
@@ -66,44 +22,41 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     async_add_entities(
-        HumiditySettingNumber(coordinator, uid, d)
+        ModeSettingNumber(coordinator, uid, setting)
         for uid, v in coordinator.data.ventilators.items()
-        if "feuchteabluft" in v.allowed_modes and not v.is_repeater
-        for d in HUMIDITY_NUMBERS
+        if not v.is_repeater
+        for setting in v.available_mode_settings
     )
 
 
-class HumiditySettingNumber(VarioventEntity, NumberEntity):
-    """One value of the humidity extraction settings."""
+class ModeSettingNumber(VarioventEntity, NumberEntity):
+    """One value of an operating mode's settings."""
 
-    entity_description: HumidityNumberDescription
     _attr_entity_category = EntityCategory.CONFIG
     _attr_mode = NumberMode.BOX
+    _attr_native_step = 1
 
-    def __init__(
-        self,
-        coordinator: VarioventCoordinator,
-        uid: int,
-        description: HumidityNumberDescription,
-    ) -> None:
-        super().__init__(coordinator, uid, description.key)
-        self.entity_description = description
+    def __init__(self, coordinator: VarioventCoordinator, uid: int, setting: ModeSetting) -> None:
+        super().__init__(coordinator, uid, setting.key)
+        self.setting = setting
+        self._attr_translation_key = setting.key
+        self._attr_native_min_value = setting.minimum
+        self._attr_native_max_value = setting.maximum
+        self._attr_native_unit_of_measurement = UNITS.get(setting.unit) if setting.unit else None
 
     @property
     def native_value(self) -> float | None:
         v = self.ventilator
-        return getattr(v.humidity_settings, self.entity_description.field) if v else None
+        return v.p(self.setting.index) if v else None
 
     async def async_set_native_value(self, value: float) -> None:
-        v = self.ventilator
-        if v is None:
-            return
-        # the spot stores the four values together; keep the others unchanged
-        # invalid combinations (e.g. "back below" >= "raise above") raise ValueError,
-        # which async_write turns into an error message in the UI
-        settings: HumiditySettings = replace(v.humidity_settings, **{self.entity_description.field: int(value)})
+        # Values of one mode are saved together and validated like in the web UI
+        # (e.g. "back below" must stay under "raise above"); violations raise
+        # ValueError, which async_write turns into an error message.
+        changes = {self.setting.key: int(value)}
+        mode = self.setting.mode
         await async_write(
             self,
-            lambda c: c.set_humidity_settings(self.uid, settings),
-            lambda dev: dev.with_humidity_settings(settings),
+            lambda c: c.set_mode_settings(self.uid, mode, changes),
+            lambda dev: dev.with_mode_settings(mode, changes),
         )

@@ -23,7 +23,7 @@ from .gwt import (
 )
 from .gwt import unbox
 from .layouts import PKG
-from .models import R, HumiditySettings, OperatingMode, SpotData, SpotInfo, Ventilator
+from .models import R, OperatingMode, SpotData, SpotInfo, Ventilator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -279,13 +279,17 @@ class VarioventClient:
         """Only administrators / supervisors may change the settings of a mode."""
         return self.role in ("ADMINISTRATOR", "SUPERVISOR")
 
-    async def set_humidity_settings(self, uid: int, settings: HumiditySettings) -> None:
-        """Save the settings of mode 'feuchteabluft' for one ventilator (admin only)."""
+    async def set_mode_settings(self, uid: int, mode: str, changes: dict[str, int]) -> None:
+        """Save settings of one operating mode (see models.MODE_SETTINGS).
+
+        The web UI shows these dialogs to administrators only, but the spot also
+        accepts them from normal users.
+        """
         v = await self._fresh(uid)
         await self.call(
             "lueftungsgeraeteParameterBAEinstellungenUpdate",
-            (SIG_VECTOR, JList([v.with_humidity_settings(settings)])),
-            (SIG_STRING, str(OperatingMode.HUMIDITY)),
+            (SIG_VECTOR, JList([v.with_mode_settings(mode, changes)])),
+            (SIG_STRING, str(OperatingMode(mode))),
             session_index=1,
         )
 

@@ -17,7 +17,7 @@ Per ventilator (DUO-Live, DUO-Smart, MONO-Smart, Silent variants):
 | Select *Fan level* | 0–4 |
 | Sensors | temperature (2nd temperature on DUO-Live), humidity, air quality (value + good/moderate/poor), active operating mode, hours until filter change, operating hours, radio signal |
 | Binary sensors | filter change due, fault |
-| Numbers (configuration) | settings of the *humidity extraction* mode: raise the fan level above X %, by N levels, switch to exhaust air above Y %, back to normal below Z % |
+| Numbers (configuration) | settings of the operating modes, as in the spot's settings dialogs: *humidity extraction* (raise level above X %, by N levels, exhaust air above Y %, back below Z %), *air quality* (raise level above X, back below Y), *exhaust air* (leave below X % humidity), *party* (duration, fan level) |
 
 For the spot: number of error messages, available firmware.
 

@@ -168,6 +168,24 @@ async def test_humidity_mode_settings(hass: HomeAssistant, fake_spot) -> None:
     assert not [c for c in fake_spot.calls if c[0] == "lueftungsgeraeteParameterBAEinstellungenUpdate"]
 
 
+async def test_mode_settings_per_device_type(hass: HomeAssistant, fake_spot) -> None:
+    from homeassistant.helpers import entity_registry as er
+
+    await _setup(hass)
+    reg = er.async_get(hass)
+    assert reg.async_get_entity_id("number", DOMAIN, "900000000006_party_duration")  # DUO-Live
+    assert not reg.async_get_entity_id("number", DOMAIN, "900000000001_party_duration")  # MONO-Smart
+    aq = _entity_id(hass, "number", "900000000001_air_quality_rise")
+    assert float(hass.states.get(aq).state) == 900
+
+    fake_spot.calls.clear()
+    await hass.services.async_call("number", "set_value", {"entity_id": aq, "value": 1000}, blocking=True)
+    call = next(c for c in fake_spot.calls if c[0] == "lueftungsgeraeteParameterBAEinstellungenUpdate")
+    assert call[1][2][1] == "luftguete"
+    value = call[1][0][1].items[0].fields[6].fields[20]
+    assert int(value) == 1000 and type(value).__name__ == "JInteger"
+
+
 async def test_relogin_after_login_elsewhere(hass: HomeAssistant, fake_spot) -> None:
     """A login in the web UI invalidates our session; the next poll must recover."""
     entry = await _setup(hass)

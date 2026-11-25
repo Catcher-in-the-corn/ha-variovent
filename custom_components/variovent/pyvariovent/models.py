@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
-from .gwt import GwtObject, JShort, unbox
+from .gwt import GwtObject, JInteger, JShort, unbox
 
 
 class OperatingMode(StrEnum):
@@ -94,12 +94,8 @@ class LG:
 class P:
     """Indices in LueftungsgeraetParameter (155 fields)."""
 
-    # settings of mode "feuchteabluft" (Short values, written as a group)
-    HUM_RISE = 13  # above this humidity the fan level is raised ...
-    HUM_FALL = 14  # ... until it drops below this value again
-    HUM_EXHAUST = 15  # above this: temporarily exhaust air at level 3
+    # 13-15, 17, 19-23: operating mode settings, see MODE_SETTINGS
     FEUCHTEABLUFT_ACTIVE = 16
-    HUM_STEPS = 17  # ... by this many levels (1-3)
     MODE_SET = 26  # eingestellte Betriebsart (incl. 'wochenplan' / 'aus')
     MODE_PREVIOUS = 27
     MODE_ACTIVE = 28  # aktuell wirksame Betriebsart
@@ -157,25 +153,56 @@ def _temp(p: GwtObject, i: int, f: int) -> float | None:
     return round(whole + (frac / 100 if whole >= 0 else -frac / 100), 1)
 
 
-@dataclass
-class HumiditySettings:
-    """Settings of the 'feuchteabluft' mode (same rules as the web UI)."""
+@dataclass(frozen=True)
+class ModeSetting:
+    """One value of an operating mode's settings dialog in the web UI."""
 
-    rise: int  # % humidity above which the level is raised
-    fall: int  # % humidity below which the normal level returns
-    exhaust: int  # % humidity above which exhaust air (level 3) is used
-    steps: int  # levels added while humidity is high (1-3)
+    key: str
+    mode: str
+    index: int  # field in LueftungsgeraetParameter
+    minimum: int
+    maximum: int
+    integer: bool = False  # java.lang.Integer instead of Short
+    unit: str | None = None
 
-    def validate(self) -> None:
-        for name in ("rise", "fall", "exhaust"):
-            if not 0 <= getattr(self, name) <= 100:
-                raise ValueError(f"{name} must be between 0 and 100 %")
-        if not 1 <= self.steps <= 3:
-            raise ValueError("steps must be between 1 and 3")
-        if self.rise <= self.fall:
-            raise ValueError("the 'raise above' value must be higher than the 'back below' value")
-        if self.exhaust <= self.rise:
-            raise ValueError("the 'exhaust above' value must be higher than the 'raise above' value")
+
+# Settings per operating mode, mapped from the web UI's dialogs (firmware V2.08).
+# All values of one mode are saved together.
+MODE_SETTINGS: tuple[ModeSetting, ...] = (
+    # "Wenn Abluftfeuchtigkeit über X % steigt, wird die Lüfterstufe um N erhöht;
+    #  über Y % vorübergehend Fortluft (Stufe 3); unter Z % wieder normale Stufe"
+    ModeSetting("humidity_rise", OperatingMode.HUMIDITY, 13, 0, 100, unit="%"),
+    ModeSetting("humidity_fall", OperatingMode.HUMIDITY, 14, 0, 100, unit="%"),
+    ModeSetting("humidity_exhaust", OperatingMode.HUMIDITY, 15, 0, 100, unit="%"),
+    ModeSetting("humidity_steps", OperatingMode.HUMIDITY, 17, 1, 3),
+    # "Wenn Luftgüte über X steigt, wird die Lüfterstufe um 1 erhöht; unter Y wieder normal"
+    ModeSetting("air_quality_rise", OperatingMode.AIR_QUALITY, 20, 0, 65535, integer=True),
+    ModeSetting("air_quality_fall", OperatingMode.AIR_QUALITY, 21, 0, 65535, integer=True),
+    # "Wenn Abluftfeuchtigkeit unter X % fällt, wird auf Betriebsart Automatik gewechselt"
+    ModeSetting("exhaust_humidity_fall", OperatingMode.EXHAUST, 19, 0, 100, unit="%"),
+    # "für X Stunden Lüfterstufe N, danach ist die Betriebsart Automatik aktiv"
+    ModeSetting("party_duration", OperatingMode.PARTY, 22, 1, 24, unit="h"),
+    ModeSetting("party_level", OperatingMode.PARTY, 23, 1, 4),
+)
+MODE_SETTINGS_BY_KEY = {s.key: s for s in MODE_SETTINGS}
+
+# value of the first key must be higher than the value of the second (web UI rules)
+_MUST_BE_HIGHER = (
+    ("humidity_rise", "humidity_fall"),
+    ("humidity_exhaust", "humidity_rise"),
+    ("air_quality_rise", "air_quality_fall"),
+)
+
+
+def validate_mode_settings(values: dict[str, int]) -> None:
+    """Raise ValueError if values violate the web UI's rules."""
+    for key, value in values.items():
+        s = MODE_SETTINGS_BY_KEY[key]
+        if not s.minimum <= value <= s.maximum:
+            raise ValueError(f"{key} must be between {s.minimum} and {s.maximum}")
+    for higher, lower in _MUST_BE_HIGHER:
+        if higher in values and lower in values and values[higher] <= values[lower]:
+            raise ValueError(f"{higher} ({values[higher]}) must be higher than {lower} ({values[lower]})")
 
 
 @dataclass
@@ -373,25 +400,28 @@ class Ventilator:
         self.params.fields[P.MODE_SET] = mode
         return self.raw
 
-    # humidity mode settings -------------------------------------------------
-    @property
-    def humidity_settings(self) -> HumiditySettings:
-        return HumiditySettings(
-            rise=self.p(P.HUM_RISE),
-            fall=self.p(P.HUM_FALL),
-            exhaust=self.p(P.HUM_EXHAUST),
-            steps=self.p(P.HUM_STEPS),
-        )
+    # operating mode settings ------------------------------------------------
+    def mode_settings(self, mode: str) -> dict[str, int | None]:
+        """Current settings of one operating mode, e.g. 'feuchteabluft'."""
+        return {s.key: self.p(s.index) for s in MODE_SETTINGS if s.mode == mode}
 
-    def with_humidity_settings(self, settings: HumiditySettings) -> GwtObject:
-        settings.validate()
-        for idx, value in (
-            (P.HUM_RISE, settings.rise),
-            (P.HUM_FALL, settings.fall),
-            (P.HUM_EXHAUST, settings.exhaust),
-            (P.HUM_STEPS, settings.steps),
-        ):
-            self.params.fields[idx] = JShort(value)
+    @property
+    def available_mode_settings(self) -> list[ModeSetting]:
+        """Settings of the modes this device supports."""
+        modes = set(self.allowed_modes)
+        return [s for s in MODE_SETTINGS if s.mode in modes]
+
+    def with_mode_settings(self, mode: str, changes: dict[str, int]) -> GwtObject:
+        """Apply changes to one mode's settings (validated together with the rest)."""
+        values = self.mode_settings(mode)
+        unknown = set(changes) - set(values)
+        if unknown:
+            raise ValueError(f"not a setting of mode {mode}: {', '.join(sorted(unknown))}")
+        values.update(changes)
+        validate_mode_settings({k: v for k, v in values.items() if v is not None})
+        for key, value in changes.items():
+            s = MODE_SETTINGS_BY_KEY[key]
+            self.params.fields[s.index] = JInteger(value) if s.integer else JShort(value)
         return self.raw
 
     def as_dict(self) -> dict[str, Any]:
