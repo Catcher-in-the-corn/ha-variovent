@@ -23,7 +23,14 @@ For the spot: number of error messages, available firmware.
 Like the spot's web UI, room sensors are reported as *unavailable* while a ventilator is
 switched off – the device does not measure then and the last values would be stale.
 
-DUO pairs (two units running in alternating direction) are shown as two devices.
+DUO pairs (two units running in alternating direction) are shown as two devices. The spot
+applies a change made to one unit to its partner as well; the partner's state in Home
+Assistant follows with the next poll.
+
+The spot accepts a fan level only in a manual operating mode. Setting a fan level on a
+ventilator that is *off* or runs on its *weekly schedule* therefore switches it to normal
+operation first (exhaust air for exhaust-only units). Select *weekly schedule* again to
+return to the schedule.
 
 ## Installation
 
