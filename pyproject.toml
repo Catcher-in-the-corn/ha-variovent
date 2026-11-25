@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyvariovent"
+version = "0.1.0"
+description = "Local API client for Variovent / ZSA DUO-Live ventilation spots"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = ["aiohttp>=3.9"]
+classifiers = [
+    "Framework :: AsyncIO",
+    "Topic :: Home Automation",
+]
+
+[project.scripts]
+pyvariovent = "pyvariovent.__main__:main"
+
+# Single source of truth: the library lives inside the Home Assistant integration
+# (so HACS installs need no extra requirement) and is published from there.
+[tool.setuptools]
+package-dir = { "pyvariovent" = "custom_components/variovent/pyvariovent" }
+packages = ["pyvariovent"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"

@@ -1,0 +1,155 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Variovent DUO-Live Spot",
+        "description": "Verbindung zur lokalen Weboberfläche deines Variovent/ZSA DUO-Live Spots.",
+        "data": {
+          "host": "Host",
+          "username": "Benutzername",
+          "password": "Passwort"
+        },
+        "data_description": {
+          "host": "IP-Adresse oder Hostname des Spots im Netzwerk.",
+          "username": "Dieselben Zugangsdaten wie für die Weboberfläche des Spots."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Erneut anmelden",
+        "data": {
+          "username": "Benutzername",
+          "password": "Passwort"
+        }
+      },
+      "reconfigure": {
+        "data": {
+          "host": "Host",
+          "username": "Benutzername",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Der Spot ist nicht erreichbar.",
+      "invalid_auth": "Benutzername oder Passwort falsch.",
+      "unknown": "Unerwartete Antwort vom Spot."
+    },
+    "abort": {
+      "already_configured": "Dieser Spot ist bereits eingerichtet.",
+      "reauth_successful": "Anmeldedaten aktualisiert.",
+      "reconfigure_successful": "Konfiguration aktualisiert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Abfrageintervall (Sekunden)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "fan": {
+      "ventilator": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "wochenplan": "Wochenplan",
+              "normalbetrieb": "Normalbetrieb",
+              "automatik": "Automatik",
+              "sommer": "Sommer",
+              "party": "Party",
+              "abwesenheit": "Abwesenheit",
+              "zuluft": "Zuluft",
+              "fortluft": "Fortluft",
+              "feuchteabluft": "Feuchte-Abluft",
+              "luftguete": "Luftgüte"
+            }
+          }
+        }
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Betriebsart",
+        "state": {
+          "aus": "Aus",
+          "wochenplan": "Wochenplan",
+          "normalbetrieb": "Normalbetrieb",
+          "automatik": "Automatik",
+          "sommer": "Sommer",
+          "party": "Party",
+          "abwesenheit": "Abwesenheit",
+          "zuluft": "Zuluft",
+          "fortluft": "Fortluft",
+          "feuchteabluft": "Feuchte-Abluft",
+          "luftguete": "Luftgüte"
+        }
+      },
+      "fan_level": {
+        "name": "Lüfterstufe"
+      }
+    },
+    "sensor": {
+      "temperature_2": {
+        "name": "Temperatur 2"
+      },
+      "air_quality": {
+        "name": "Luftqualität"
+      },
+      "air_quality_level": {
+        "name": "Luftqualität (Ampel)",
+        "state": {
+          "good": "Gut",
+          "moderate": "Mittel",
+          "poor": "Schlecht"
+        }
+      },
+      "active_mode": {
+        "name": "Aktive Betriebsart",
+        "state": {
+          "aus": "Aus",
+          "wochenplan": "Wochenplan",
+          "normalbetrieb": "Normalbetrieb",
+          "automatik": "Automatik",
+          "sommer": "Sommer",
+          "party": "Party",
+          "abwesenheit": "Abwesenheit",
+          "zuluft": "Zuluft",
+          "fortluft": "Fortluft",
+          "feuchteabluft": "Feuchte-Abluft",
+          "luftguete": "Luftgüte"
+        }
+      },
+      "filter_remaining": {
+        "name": "Filterwechsel in"
+      },
+      "operating_hours": {
+        "name": "Betriebsstunden"
+      },
+      "signal": {
+        "name": "Signalstärke"
+      },
+      "error_count": {
+        "name": "Fehlermeldungen"
+      },
+      "firmware_available": {
+        "name": "Verfügbare Firmware"
+      }
+    },
+    "binary_sensor": {
+      "filter_due": {
+        "name": "Filterwechsel fällig"
+      },
+      "fault": {
+        "name": "Störung"
+      }
+    }
+  },
+  "exceptions": {
+    "command_failed": {
+      "message": "Befehl an den Spot fehlgeschlagen: {error}"
+    }
+  }
+}

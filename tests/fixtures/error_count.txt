@@ -1,0 +1,1 @@
+//OK[0,0,0,0,0,0,0,0,0,0,0,-1,3,'P__________',7,0,6,0,0,0,0,0,5,0,0,0,2,0,0,0,0,0,4,0,0,2,3,0,0,2,0,2,0,2,0,2,0,2,0,0,0,0,1,["de.zsa.gwt.zsalivespotwebapp.shared.MyResult/187169326","java.util.Vector/3057315478","java.lang.Integer/3438268394","java.lang.Boolean/476441737","de.zsa.gwt.zsalivespotwebapp.shared.MyResult$resultCode/2976108651","","java.lang.Long/4227064769"],0,7]

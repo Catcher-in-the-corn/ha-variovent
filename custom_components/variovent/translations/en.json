@@ -1,0 +1,155 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Variovent DUO-Live Spot",
+        "description": "Connect to the local web interface of your Variovent / ZSA DUO-Live spot.",
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "host": "IP address or hostname of the spot in your network.",
+          "username": "Same login as for the spot's web interface."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in again",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
+      },
+      "reconfigure": {
+        "data": {
+          "host": "Host",
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the spot.",
+      "invalid_auth": "Invalid username or password.",
+      "unknown": "Unexpected response from the spot."
+    },
+    "abort": {
+      "already_configured": "This spot is already configured.",
+      "reauth_successful": "Login updated.",
+      "reconfigure_successful": "Configuration updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "fan": {
+      "ventilator": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "wochenplan": "Weekly schedule",
+              "normalbetrieb": "Normal",
+              "automatik": "Automatic",
+              "sommer": "Summer",
+              "party": "Party",
+              "abwesenheit": "Away",
+              "zuluft": "Supply air",
+              "fortluft": "Exhaust air",
+              "feuchteabluft": "Humidity extraction",
+              "luftguete": "Air quality"
+            }
+          }
+        }
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Operating mode",
+        "state": {
+          "aus": "Off",
+          "wochenplan": "Weekly schedule",
+          "normalbetrieb": "Normal",
+          "automatik": "Automatic",
+          "sommer": "Summer",
+          "party": "Party",
+          "abwesenheit": "Away",
+          "zuluft": "Supply air",
+          "fortluft": "Exhaust air",
+          "feuchteabluft": "Humidity extraction",
+          "luftguete": "Air quality"
+        }
+      },
+      "fan_level": {
+        "name": "Fan level"
+      }
+    },
+    "sensor": {
+      "temperature_2": {
+        "name": "Temperature 2"
+      },
+      "air_quality": {
+        "name": "Air quality"
+      },
+      "air_quality_level": {
+        "name": "Air quality level",
+        "state": {
+          "good": "Good",
+          "moderate": "Moderate",
+          "poor": "Poor"
+        }
+      },
+      "active_mode": {
+        "name": "Active operating mode",
+        "state": {
+          "aus": "Off",
+          "wochenplan": "Weekly schedule",
+          "normalbetrieb": "Normal",
+          "automatik": "Automatic",
+          "sommer": "Summer",
+          "party": "Party",
+          "abwesenheit": "Away",
+          "zuluft": "Supply air",
+          "fortluft": "Exhaust air",
+          "feuchteabluft": "Humidity extraction",
+          "luftguete": "Air quality"
+        }
+      },
+      "filter_remaining": {
+        "name": "Filter change in"
+      },
+      "operating_hours": {
+        "name": "Operating hours"
+      },
+      "signal": {
+        "name": "Signal strength"
+      },
+      "error_count": {
+        "name": "Error messages"
+      },
+      "firmware_available": {
+        "name": "Firmware available"
+      }
+    },
+    "binary_sensor": {
+      "filter_due": {
+        "name": "Filter change due"
+      },
+      "fault": {
+        "name": "Fault"
+      }
+    }
+  },
+  "exceptions": {
+    "command_failed": {
+      "message": "Command to the spot failed: {error}"
+    }
+  }
+}

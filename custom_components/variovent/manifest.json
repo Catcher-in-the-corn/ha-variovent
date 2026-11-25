@@ -1,0 +1,14 @@
+{
+  "domain": "variovent",
+  "name": "Variovent DUO-Live",
+  "codeowners": ["@Catcher-in-the-corn"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/Catcher-in-the-corn/ha-variovent",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/Catcher-in-the-corn/ha-variovent/issues",
+  "loggers": ["custom_components.variovent.pyvariovent"],
+  "requirements": [],
+  "version": "0.1.0"
+}
