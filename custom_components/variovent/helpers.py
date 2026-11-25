@@ -36,6 +36,22 @@ async def async_write(
         ) from err
     v = entity.ventilator
     if v is not None:
-        optimistic(v)
+        try:
+            optimistic(v)
+        except ValueError:
+            pass  # cached state is only cosmetic; the refresh below corrects it
         coordinator.async_update_listeners()
     await coordinator.async_request_refresh()
+
+
+def _optimistic_level(level: int) -> Callable[[Ventilator], Any]:
+    def apply(v: Ventilator) -> None:
+        v.with_mode(v.mode_for_fan_level)
+        v.with_fan_level(level)
+
+    return apply
+
+
+async def set_level(entity: VarioventEntity, level: int) -> None:
+    """Set a fan level (the library switches 'aus'/schedule devices to manual mode)."""
+    await async_write(entity, lambda c: c.set_fan_level(entity.uid, level), _optimistic_level(level))

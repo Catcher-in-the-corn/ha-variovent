@@ -11,7 +11,7 @@ from .pyvariovent.models import FAN_LEVEL_MAX, FAN_LEVEL_MIN
 from .const import SELECTABLE_MODES
 from .coordinator import VarioventConfigEntry
 from .entity import VarioventEntity
-from .helpers import async_write
+from .helpers import async_write, set_level
 
 FAN_LEVELS = [str(i) for i in range(FAN_LEVEL_MIN, FAN_LEVEL_MAX + 1)]
 
@@ -32,10 +32,20 @@ class ModeSelect(VarioventEntity, SelectEntity):
     """Betriebsart."""
 
     _attr_translation_key = "mode"
-    _attr_options = SELECTABLE_MODES
 
     def __init__(self, coordinator, uid: int) -> None:
         super().__init__(coordinator, uid, "mode")
+
+    @property
+    def options(self) -> list[str]:
+        """Only the modes this device type supports and the user may set."""
+        v = self.ventilator
+        if v is None:
+            return SELECTABLE_MODES
+        options = [m for m in SELECTABLE_MODES if m in v.allowed_modes]
+        if v.mode in SELECTABLE_MODES and v.mode not in options:
+            options.append(v.mode)  # keep the current state representable
+        return options
 
     @property
     def current_option(self) -> str | None:
@@ -61,5 +71,5 @@ class FanLevelSelect(VarioventEntity, SelectEntity):
         return str(v.fan_level) if v and v.fan_level is not None else None
 
     async def async_select_option(self, option: str) -> None:
-        level = int(option)
-        await async_write(self, lambda c: c.set_fan_level(self.uid, level), lambda v: v.with_fan_level(level))
+        # switches 'aus' / schedule devices to manual operation first (spot requirement)
+        await set_level(self, int(option))

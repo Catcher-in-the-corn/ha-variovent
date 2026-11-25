@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import pytest
 from homeassistant.config_entries import ConfigEntryState
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
@@ -67,30 +69,55 @@ async def test_setup_creates_devices_and_entities(hass: HomeAssistant, fake_spot
     assert sum(hass.states.get(e).state == "on" for e in filter_due) == 3
 
 
+def _sent(calls, method: str) -> list:
+    """Devices sent with each call of `method`, in order."""
+    return [c[1][0][1].items[0] for c in calls if c[0] == method]
+
+
+MODE_UPDATE = "lueftungsgeraeteBetriebsartUpdate"
+LEVEL_UPDATE = "lueftungsgeraeteLuefterstufeUpdate"
+
+
 async def test_set_mode_and_level(hass: HomeAssistant, fake_spot) -> None:
     await _setup(hass)
-    fan = sorted(hass.states.async_entity_ids("fan"))[0]
+    fan = "fan.raum_1"  # MONO-Smart, currently 'aus'
 
     fake_spot.calls.clear()
     await hass.services.async_call("fan", "turn_off", {"entity_id": fan}, blocking=True)
-    update = next(c for c in fake_spot.calls if c[0] == "lueftungsgeraeteBetriebsartUpdate")
-    assert update[1][0][1].items[0].fields[6].fields[26] == "aus"
+    assert _sent(fake_spot.calls, MODE_UPDATE)[0].fields[6].fields[26] == "aus"
 
     fake_spot.calls.clear()
     await hass.services.async_call(
-        "fan", "set_preset_mode", {"entity_id": fan, "preset_mode": "party"}, blocking=True
+        "fan", "set_preset_mode", {"entity_id": fan, "preset_mode": "abwesenheit"}, blocking=True
     )
-    update = next(c for c in fake_spot.calls if c[0] == "lueftungsgeraeteBetriebsartUpdate")
-    device = update[1][0][1].items[0]
-    assert device.fields[6].fields[26] == "party"
+    assert _sent(fake_spot.calls, MODE_UPDATE)[0].fields[6].fields[26] == "abwesenheit"
 
+    # the spot rejects fan levels while 'aus': the mode is switched to normal first
     fake_spot.calls.clear()
-    select = next(e for e in hass.states.async_entity_ids("select") if e.endswith("fan_level"))
     await hass.services.async_call(
-        "select", "select_option", {"entity_id": select, "option": "3"}, blocking=True
+        "select", "select_option", {"entity_id": "select.raum_1_fan_level", "option": "3"}, blocking=True
     )
-    update = next(c for c in fake_spot.calls if c[0] == "lueftungsgeraeteLuefterstufeUpdate")
-    assert int(update[1][0][1].items[0].fields[6].fields[109]) == 3
+    methods = [c[0] for c in fake_spot.calls if c[0] in (MODE_UPDATE, LEVEL_UPDATE)]
+    assert methods == [MODE_UPDATE, LEVEL_UPDATE]
+    assert _sent(fake_spot.calls, MODE_UPDATE)[0].fields[6].fields[26] == "normalbetrieb"
+    assert int(_sent(fake_spot.calls, LEVEL_UPDATE)[0].fields[6].fields[109]) == 3
+
+
+async def test_modes_depend_on_device_type(hass: HomeAssistant, fake_spot) -> None:
+    await _setup(hass)
+    mono = hass.states.get("select.raum_1_operating_mode").attributes["options"]
+    duo = hass.states.get("select.raum_6_operating_mode").attributes["options"]
+    assert "party" not in mono and "automatik" not in mono and "sommer" not in mono
+    assert "party" in duo and "automatik" in duo
+    assert "party" not in hass.states.get("fan.raum_1").attributes["preset_modes"]
+
+    # a mode the device does not support is refused before anything is sent
+    fake_spot.calls.clear()
+    with pytest.raises(HomeAssistantError):
+        await hass.services.async_call(
+            "fan", "set_preset_mode", {"entity_id": "fan.raum_1", "preset_mode": "party"}, blocking=True
+        )
+    assert not _sent(fake_spot.calls, MODE_UPDATE)
 
 
 async def test_unload(hass: HomeAssistant, fake_spot) -> None:

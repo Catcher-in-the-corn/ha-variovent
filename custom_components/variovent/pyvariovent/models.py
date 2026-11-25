@@ -32,6 +32,50 @@ class OperatingMode(StrEnum):
 FAN_LEVEL_MIN = 0
 FAN_LEVEL_MAX = 4
 
+# The spot only accepts a fan level while a manual mode is active ("aus" and
+# "wochenplan" are rejected with a misleading "no permission" error).
+MODES_WITHOUT_FAN_LEVEL = {OperatingMode.OFF, OperatingMode.SCHEDULE}
+# Sensor driven modes forbid the extreme levels (web UI rule).
+MODES_WITHOUT_EXTREME_LEVELS = {OperatingMode.AIR_QUALITY, OperatingMode.HUMIDITY}
+
+_ALL_TYPES = {1, 2, 3, 10, 11, 20, 21, 23}
+_NOT_EXHAUST_ONLY = _ALL_TYPES - {23}
+# Which device types support which mode (from the web UI, firmware V2.08).
+MODE_DEVICE_TYPES: dict[str, set[int]] = {
+    OperatingMode.OFF: _ALL_TYPES,
+    OperatingMode.SCHEDULE: _ALL_TYPES,
+    OperatingMode.EXHAUST: _ALL_TYPES,
+    OperatingMode.HUMIDITY: _ALL_TYPES,
+    OperatingMode.SUPPLY: _NOT_EXHAUST_ONLY,
+    OperatingMode.AWAY: _NOT_EXHAUST_ONLY,
+    OperatingMode.NORMAL: _NOT_EXHAUST_ONLY,
+    OperatingMode.AIR_QUALITY: _NOT_EXHAUST_ONLY,
+    OperatingMode.SUMMER: {10, 11},
+    OperatingMode.PARTY: {1, 2, 3},
+    OperatingMode.AUTO: {1, 2, 3},
+}
+
+
+class R:
+    """Indices in UserRechteLueftungsgeraete (per-device user rights, 1 = allowed)."""
+
+    MODE: dict[str, int] = {
+        OperatingMode.AWAY: 1,
+        OperatingMode.OFF: 2,
+        OperatingMode.AUTO: 3,
+        OperatingMode.HUMIDITY: 4,
+        OperatingMode.EXHAUST: 5,
+        OperatingMode.AIR_QUALITY: 6,
+        OperatingMode.NORMAL: 7,
+        OperatingMode.PARTY: 8,
+        OperatingMode.SUMMER: 9,
+        OperatingMode.SCHEDULE: 10,
+        OperatingMode.SUPPLY: 11,
+    }
+    FAN_LEVEL = 14
+    FAN_LEVEL_0 = 15  # .. 19 for level 4
+    UID = 20
+
 
 class LG:
     """Indices in Lueftungsgeraet (15 fields)."""
@@ -113,6 +157,7 @@ class Ventilator:
     """One Lüftungsgerät connected to the spot."""
 
     raw: GwtObject
+    rights: GwtObject | None = None  # UserRechteLueftungsgeraete of the logged-in user
 
     @property
     def params(self) -> GwtObject:
@@ -243,23 +288,72 @@ class Ventilator:
     def has_error(self) -> bool:
         return any(self.p(i) == 1 for i in (P.ERROR_FLAG_A, P.ERROR_FLAG_B, P.ERROR_FLAG_C))
 
-    # mutation helpers (return modified copies of the raw DTO) -----------------
+    # capabilities ---------------------------------------------------------
+    def _right(self, idx: int) -> bool:
+        if self.rights is None:
+            return True  # unknown: let the spot decide
+        return _v(self.rights, idx) == 1
+
+    @property
+    def allowed_modes(self) -> list[str]:
+        """Modes this device type supports and the user may set (UI order)."""
+        return [
+            str(m)
+            for m in OperatingMode
+            if (self.device_type in MODE_DEVICE_TYPES[m] or self.device_type is None)
+            and self._right(R.MODE[m])
+        ]
+
+    @property
+    def can_set_fan_level(self) -> bool:
+        return not self.is_repeater and self._right(R.FAN_LEVEL)
+
+    def allowed_fan_levels(self, mode: str | None = None) -> list[int]:
+        """Levels accepted in `mode` (default: the mode a level change will run in)."""
+        if not self.can_set_fan_level:
+            return []
+        mode = mode or self.mode_for_fan_level
+        return [
+            lvl
+            for lvl in range(FAN_LEVEL_MIN, FAN_LEVEL_MAX + 1)
+            if self._right(R.FAN_LEVEL_0 + lvl)
+            and not (mode in MODES_WITHOUT_EXTREME_LEVELS and lvl in (FAN_LEVEL_MIN, FAN_LEVEL_MAX))
+        ]
+
+    @property
+    def mode_for_fan_level(self) -> str:
+        """Mode the device has to be in for a fan level change."""
+        if self.mode in MODES_WITHOUT_FAN_LEVEL or self.mode is None:
+            allowed = self.allowed_modes
+            for candidate in (OperatingMode.NORMAL, OperatingMode.EXHAUST):
+                if candidate in allowed:
+                    return candidate
+            return OperatingMode.NORMAL
+        return self.mode
+
+    # mutation helpers (modify the raw DTO in place and return it) -------------
     def with_fan_level(self, level: int) -> GwtObject:
         if not FAN_LEVEL_MIN <= level <= FAN_LEVEL_MAX:
             raise ValueError(f"fan level must be {FAN_LEVEL_MIN}..{FAN_LEVEL_MAX}")
+        if self.rights is not None and level not in self.allowed_fan_levels():
+            raise ValueError(f"fan level {level} is not allowed for {self.name} in mode {self.mode_for_fan_level}")
         self.params.fields[P.FAN_LEVEL] = JShort(level)
         return self.raw
 
     def with_mode(self, mode: str) -> GwtObject:
-        self.params.fields[P.MODE_SET] = str(OperatingMode(mode))
+        mode = str(OperatingMode(mode))
+        if self.device_type is not None and mode not in self.allowed_modes:
+            raise ValueError(f"mode {mode} is not available for {self.name} ({self.model})")
+        self.params.fields[P.MODE_SET] = mode
         return self.raw
 
     def as_dict(self) -> dict[str, Any]:
         keys = (
             "uid", "serial", "name", "model", "room_type", "dwelling", "partner_uid",
             "mode", "active_mode", "fan_level", "temperature", "temperature_2", "humidity",
-            "air_quality", "air_quality_level", "sensors_active", "signal", "operating_hours", "filter_interval", "filter_remaining_hours",
-            "filter_due", "has_error",
+            "air_quality", "air_quality_level", "sensors_active", "signal", "operating_hours",
+            "filter_interval", "filter_remaining_hours", "filter_due", "has_error",
+            "allowed_modes", "can_set_fan_level",
         )  # fmt: skip
         return {k: getattr(self, k) for k in keys}
 

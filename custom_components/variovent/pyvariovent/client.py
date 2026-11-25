@@ -23,7 +23,7 @@ from .gwt import (
 )
 from .gwt import unbox
 from .layouts import PKG
-from .models import OperatingMode, SpotData, SpotInfo, Ventilator
+from .models import R, OperatingMode, SpotData, SpotInfo, Ventilator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -199,7 +199,7 @@ class VarioventClient:
     async def fetch_data(self) -> SpotData:
         """Poll everything the Home Assistant integration needs."""
         devices = find_all(await self.read_devices(), "Lueftungsgeraet")
-        ventilators = {v.uid: v for v in (Ventilator(d) for d in devices)}
+        ventilators = {v.uid: v for v in (self._ventilator(d) for d in devices)}
         error_count = firmware = available = None
         try:
             error_count = unbox(result_value(await self.read_error_count(), MR_INT))
@@ -223,13 +223,36 @@ class VarioventClient:
             "Lueftungsgeraet",
         )
         for d in devices:
-            v = Ventilator(d)
+            v = self._ventilator(d)
             if v.uid == uid:
                 return v
         raise VariventError(f"ventilator {uid} not found")
 
+    def _rights(self) -> dict[int, GwtObject]:
+        """Per-device rights of the logged-in user (from the UserSession)."""
+        if self.user_session is None:
+            return {}
+        return {
+            unbox(r.fields[R.UID]): r
+            for r in find_all(self.user_session.fields[SESSION_RIGHTS], "UserRechteLueftungsgeraete")
+        }
+
+    def _ventilator(self, raw: GwtObject) -> Ventilator:
+        v = Ventilator(raw)
+        v.rights = self._rights().get(v.uid)
+        return v
+
     async def set_fan_level(self, uid: int, level: int) -> None:
+        """Set a fan level; switches to a manual mode first if needed.
+
+        The spot rejects level changes while the mode is 'aus' or 'wochenplan'.
+        """
         v = await self._fresh(uid)
+        target_mode = v.mode_for_fan_level
+        if target_mode != v.mode:
+            _LOGGER.debug("%s: switching to %s before setting fan level", v.name, target_mode)
+            await self.update_mode([v.with_mode(target_mode)])
+            v = await self._fresh(uid)
         await self.update_fan_level([v.with_fan_level(level)])
 
     async def set_mode(self, uid: int, mode: str | OperatingMode) -> None:
@@ -238,6 +261,8 @@ class VarioventClient:
 
 
 # ---------------------------------------------------------------------- helpers
+
+SESSION_RIGHTS = 20  # UserSession field holding the UserRechte object
 
 # MyResult field indices
 MR_INT = 10

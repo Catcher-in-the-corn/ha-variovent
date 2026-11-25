@@ -65,7 +65,6 @@ class VarioventEntity(CoordinatorEntity[VarioventCoordinator]):
             model=v.model,
             name=v.name,
             serial_number=v.serial,
-            suggested_area=v.name,
             **_via_spot(coordinator),
         )
 

@@ -14,7 +14,7 @@ from .pyvariovent.models import FAN_LEVEL_MAX, OperatingMode, P
 from .const import SELECTABLE_MODES
 from .coordinator import VarioventConfigEntry
 from .entity import VarioventEntity
-from .helpers import async_write
+from .helpers import async_write, set_level
 
 PRESET_MODES = [m for m in SELECTABLE_MODES if m != OperatingMode.OFF]
 SPEED_COUNT = FAN_LEVEL_MAX + 1  # levels 0..4 -> 20 %, 40 %, ... 100 %
@@ -37,7 +37,6 @@ class VarioventFan(VarioventEntity, FanEntity):
     _attr_name = None
     _attr_translation_key = "ventilator"
     _attr_speed_count = SPEED_COUNT
-    _attr_preset_modes = PRESET_MODES
     _attr_supported_features = (
         FanEntityFeature.SET_SPEED
         | FanEntityFeature.PRESET_MODE
@@ -63,6 +62,11 @@ class VarioventFan(VarioventEntity, FanEntity):
         return round((v.fan_level + 1) * 100 / SPEED_COUNT)
 
     @property
+    def preset_modes(self) -> list[str]:
+        v = self.ventilator
+        return [m for m in v.allowed_modes if m in PRESET_MODES] if v else PRESET_MODES
+
+    @property
     def preset_mode(self) -> str | None:
         v = self.ventilator
         return v.mode if v and v.mode in PRESET_MODES else None
@@ -77,9 +81,7 @@ class VarioventFan(VarioventEntity, FanEntity):
             await self.async_turn_off()
             return
         level = min(FAN_LEVEL_MAX, max(0, math.ceil(percentage * SPEED_COUNT / 100) - 1))
-        if not self.is_on:
-            await self._set_mode(self._resume_mode())
-        await async_write(self, lambda c: c.set_fan_level(self.uid, level), lambda v: v.with_fan_level(level))
+        await set_level(self, level)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         await self._set_mode(preset_mode)
@@ -89,9 +91,10 @@ class VarioventFan(VarioventEntity, FanEntity):
     ) -> None:
         if preset_mode:
             await self._set_mode(preset_mode)
-        elif not self.is_on:
+        elif not self.is_on and not percentage:
             await self._set_mode(self._resume_mode())
         if percentage:
+            # a fan level also switches an 'aus' / schedule device into manual operation
             await self.async_set_percentage(percentage)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -101,7 +104,9 @@ class VarioventFan(VarioventEntity, FanEntity):
         """Mode to use when switching on: the last one before 'aus', else Normalbetrieb."""
         v = self.ventilator
         previous = v.p(P.MODE_PREVIOUS) if v else None
-        return previous if previous in PRESET_MODES else OperatingMode.NORMAL
+        if v and previous in v.allowed_modes and previous != OperatingMode.OFF:
+            return previous
+        return v.mode_for_fan_level if v else OperatingMode.NORMAL
 
     async def _set_mode(self, mode: str) -> None:
         await async_write(self, lambda c: c.set_mode(self.uid, mode), lambda v: v.with_mode(mode))
