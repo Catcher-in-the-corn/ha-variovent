@@ -114,17 +114,19 @@ class VarioventClient:
             us = (SIG_USER_SESSION, self.user_session)
             p = p + [us] if session_last else [us] + p
             result = await self.raw_call(MAIN_SERVICE, method, p)
-            if isinstance(result, GwtObject) and result.name == "MyResult":
-                if result_session_expired(result) and attempt == 1:
-                    _LOGGER.debug("%s: session expired, logging in again", method)
+            if isinstance(result, GwtObject) and result.name == "MyResult" and not result_ok(result):
+                # The spot allows one session per user: a login elsewhere (web UI, app)
+                # invalidates ours, and calls then fail without any message text.
+                stale = result_session_expired(result) or not result_texts(result)
+                if stale and attempt == 1:
+                    _LOGGER.info("Session at %s no longer valid (logged in elsewhere?), logging in again", self.host)
                     self.user_session = None
                     continue
-                if not result_ok(result):
-                    if result_session_expired(result):
-                        raise AuthError(f"{method}: session rejected")
-                    raise VariventError(f"{method} failed: {result_message(result)}")
+                if stale:
+                    raise VariventError(f"{method}: session rejected after re-login")
+                raise VariventError(f"{method} failed: {result_message(result)}")
             return result
-        raise AuthError(f"{method}: session rejected")
+        raise VariventError(f"{method}: session rejected after re-login")
 
     # ------------------------------------------------------------------ login
 
@@ -284,9 +286,12 @@ def result_session_expired(result: GwtObject) -> bool:
     return result.fields[MR_SESSION_EXPIRED] is True
 
 
+def result_texts(result: GwtObject) -> list[str]:
+    return [x for x in walk(result) if isinstance(x, str) and x]
+
+
 def result_message(result: GwtObject) -> str:
-    texts = [x for x in walk(result) if isinstance(x, str) and x]
-    return "; ".join(texts[:5]) or "unknown error"
+    return "; ".join(result_texts(result)[:5]) or "unknown error"
 
 
 

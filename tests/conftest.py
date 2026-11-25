@@ -22,6 +22,8 @@ class FakeSpot:
         self.calls: list[tuple[str, list[tuple[str, Any]]]] = []
         self.fail_login = False
         self.offline = False
+        self.stale_session_calls = 0  # next N session calls fail like after a login elsewhere
+        self.logins = 0
 
     async def raw_call(self, client, service, method: str, params):  # noqa: ANN001
         from custom_components.variovent.pyvariovent.exceptions import CannotConnect
@@ -31,7 +33,16 @@ class FakeSpot:
         if self.offline:
             raise CannotConnect("offline")
         self.calls.append((method, params))
+        if method not in ("loginLiveSpot", "checkSpotIstDa") and self.stale_session_calls:
+            from custom_components.variovent.pyvariovent.gwt import JEnum
+
+            self.stale_session_calls -= 1
+            result = parse_response(_load("ping"))
+            code = result.fields[21]
+            result.fields[21] = JEnum(code.sig, 1)  # error without any message text
+            return result
         if method == "loginLiveSpot":
+            self.logins += 1
             if self.fail_login:
                 return parse_response(_load("ping"))  # MyResult without a session
             return GwtObject(PKG + "UserSession/2592594343", [None] * 23)

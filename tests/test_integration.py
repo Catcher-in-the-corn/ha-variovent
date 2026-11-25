@@ -120,6 +120,22 @@ async def test_modes_depend_on_device_type(hass: HomeAssistant, fake_spot) -> No
     assert not _sent(fake_spot.calls, MODE_UPDATE)
 
 
+async def test_relogin_after_login_elsewhere(hass: HomeAssistant, fake_spot) -> None:
+    """A login in the web UI invalidates our session; the next poll must recover."""
+    entry = await _setup(hass)
+    coordinator = entry.runtime_data
+    logins = fake_spot.logins
+
+    fake_spot.stale_session_calls = 1
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.last_update_success
+    assert fake_spot.logins == logins + 1
+    assert hass.states.get("fan.raum_1").state != STATE_UNAVAILABLE
+    assert not list(hass.config_entries.flow.async_progress())  # no reauth prompt
+
+
 async def test_unload(hass: HomeAssistant, fake_spot) -> None:
     entry = await _setup(hass)
     assert await hass.config_entries.async_unload(entry.entry_id)
