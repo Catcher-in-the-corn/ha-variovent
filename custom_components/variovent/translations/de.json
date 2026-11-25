@@ -32,7 +32,8 @@
     "error": {
       "cannot_connect": "Der Spot ist nicht erreichbar.",
       "invalid_auth": "Benutzername oder Passwort falsch.",
-      "unknown": "Unerwartete Antwort vom Spot."
+      "unknown": "Unerwartete Antwort vom Spot.",
+      "spot_error": "Der Spot hat die Anfrage abgelehnt: {error}"
     },
     "abort": {
       "already_configured": "Dieser Spot ist bereits eingerichtet.",

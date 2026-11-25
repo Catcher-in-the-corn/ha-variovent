@@ -32,7 +32,8 @@
     "error": {
       "cannot_connect": "Cannot reach the spot.",
       "invalid_auth": "Invalid username or password.",
-      "unknown": "Unexpected response from the spot."
+      "unknown": "Unexpected response from the spot.",
+      "spot_error": "The spot refused the request: {error}"
     },
     "abort": {
       "already_configured": "This spot is already configured.",

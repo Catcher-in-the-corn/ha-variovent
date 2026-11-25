@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/Catcher-in-the-corn/ha-variovent/issues",
   "loggers": ["custom_components.variovent.pyvariovent"],
   "requirements": [],
-  "version": "0.1.2"
+  "version": "0.1.3"
 }

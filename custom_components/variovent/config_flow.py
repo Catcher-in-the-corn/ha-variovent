@@ -49,6 +49,23 @@ async def _validate(hass, host: str, username: str, password: str) -> str:
         return serials[0]
 
 
+async def _check(
+    hass, host: str, username: str, password: str
+) -> tuple[str | None, dict[str, str], dict[str, str]]:
+    """Validate credentials; returns (unique_id, errors, description placeholders)."""
+    try:
+        return await _validate(hass, host, username, password), {}, {}
+    except AuthError:
+        return None, {"base": "invalid_auth"}, {}
+    except CannotConnect as err:
+        _LOGGER.warning("Spot at %s not reachable: %s", host, err)
+        return None, {"base": "cannot_connect"}, {}
+    except VariventError as err:
+        # reachable and logged in, but the spot refused a request (e.g. missing user rights)
+        _LOGGER.warning("Spot at %s refused a request: %s", host, err)
+        return None, {"base": "spot_error"}, {"error": str(err)}
+
+
 class VarioventConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow."""
 
@@ -56,19 +73,13 @@ class VarioventConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {"error": ""}
         if user_input is not None:
-            try:
-                unique_id = await _validate(
-                    self.hass, user_input[CONF_HOST], user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
-                )
-            except AuthError:
-                errors["base"] = "invalid_auth"
-            except CannotConnect:
-                errors["base"] = "cannot_connect"
-            except VariventError:
-                _LOGGER.exception("Unexpected response from spot")
-                errors["base"] = "unknown"
-            else:
+            unique_id, errors, found = await _check(
+                self.hass, user_input[CONF_HOST], user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+            )
+            placeholders.update(found)
+            if unique_id:
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured(updates={CONF_HOST: user_input[CONF_HOST]})
                 return self.async_create_entry(title=f"Variovent ({user_input[CONF_HOST]})", data=user_input)
@@ -76,6 +87,7 @@ class VarioventConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=self.add_suggested_values_to_schema(USER_SCHEMA, user_input),
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
@@ -83,15 +95,14 @@ class VarioventConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {"error": ""}
         entry = self._get_reauth_entry()
         if user_input is not None:
-            try:
-                await _validate(self.hass, entry.data[CONF_HOST], user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
-            except AuthError:
-                errors["base"] = "invalid_auth"
-            except (CannotConnect, VariventError):
-                errors["base"] = "cannot_connect"
-            else:
+            unique_id, errors, found = await _check(
+                self.hass, entry.data[CONF_HOST], user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+            )
+            placeholders.update(found)
+            if unique_id:
                 return self.async_update_reload_and_abort(entry, data_updates=user_input)
         return self.async_show_form(
             step_id="reauth_confirm",
@@ -102,24 +113,25 @@ class VarioventConfigFlow(ConfigFlow, domain=DOMAIN):
                 }
             ),
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
+        placeholders: dict[str, str] = {"error": ""}
         entry = self._get_reconfigure_entry()
         if user_input is not None:
-            try:
-                await _validate(self.hass, user_input[CONF_HOST], user_input[CONF_USERNAME], user_input[CONF_PASSWORD])
-            except AuthError:
-                errors["base"] = "invalid_auth"
-            except (CannotConnect, VariventError):
-                errors["base"] = "cannot_connect"
-            else:
+            unique_id, errors, found = await _check(
+                self.hass, user_input[CONF_HOST], user_input[CONF_USERNAME], user_input[CONF_PASSWORD]
+            )
+            placeholders.update(found)
+            if unique_id:
                 return self.async_update_reload_and_abort(entry, data_updates=user_input)
         return self.async_show_form(
             step_id="reconfigure",
             data_schema=self.add_suggested_values_to_schema(USER_SCHEMA, user_input or dict(entry.data)),
             errors=errors,
+            description_placeholders=placeholders,
         )
 
     @staticmethod

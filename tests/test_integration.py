@@ -47,6 +47,23 @@ async def test_config_flow_offline(hass: HomeAssistant, fake_spot) -> None:
     assert result["errors"] == {"base": "cannot_connect"}
 
 
+async def test_config_flow_spot_refuses(hass: HomeAssistant, fake_spot) -> None:
+    """Reachable spot, valid login, but the user lacks a right: show the spot's message."""
+    fake_spot.denied = {"lueftungsgeraeteReadRange"}
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    assert result["errors"] == {"base": "spot_error"}
+    assert "Berechtigung" in result["description_placeholders"]["error"]
+
+
+async def test_config_flow_restricted_user_without_spot_details(hass: HomeAssistant, fake_spot) -> None:
+    fake_spot.denied = {"raspberrypiReadEingeschraenkt"}
+    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].unique_id == "900000000001"
+
+
 async def test_setup_creates_devices_and_entities(hass: HomeAssistant, fake_spot) -> None:
     entry = await _setup(hass)
     assert entry.state is ConfigEntryState.LOADED

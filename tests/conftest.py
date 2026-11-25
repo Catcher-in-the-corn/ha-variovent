@@ -23,6 +23,7 @@ class FakeSpot:
         self.fail_login = False
         self.offline = False
         self.stale_session_calls = 0  # next N session calls fail like after a login elsewhere
+        self.denied: set[str] = set()  # methods the user has no right for
         self.logins = 0
 
     async def raw_call(self, client, service, method: str, params):  # noqa: ANN001
@@ -33,6 +34,10 @@ class FakeSpot:
         if self.offline:
             raise CannotConnect("offline")
         self.calls.append((method, params))
+        if method in self.denied:
+            from custom_components.variovent.pyvariovent.exceptions import VariventError
+
+            raise VariventError(f"{method} failed: Sie besitzen nicht die Berechtigung")
         if method not in ("loginLiveSpot", "checkSpotIstDa") and self.stale_session_calls:
             from custom_components.variovent.pyvariovent.gwt import JEnum
 
