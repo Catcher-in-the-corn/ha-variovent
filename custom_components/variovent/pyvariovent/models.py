@@ -228,7 +228,13 @@ class Ventilator:
 
     @property
     def serial(self) -> str:
-        return _v(self.raw, LG.SERIAL) or str(self.uid)
+        """Serial number; used as the Home Assistant unique_id.
+
+        The fallback stays the radio address (as before this constant was renamed) so
+        the unique_id of an existing install never changes, and because the address is
+        a stable device property while the uid is only a database row id.
+        """
+        return _v(self.raw, LG.SERIAL) or str(_v(self.raw, LG.ADDRESS))
 
     @property
     def name(self) -> str:

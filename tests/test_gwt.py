@@ -97,6 +97,15 @@ def test_serial_is_serial_not_radio_address(ventilators: list[Ventilator]) -> No
         assert v.serial != str(v.raw.fields[0])
 
 
+def test_serial_fallback_stays_the_radio_address(ventilators: list[Ventilator]) -> None:
+    """The unique_id of an existing install must not change: without a serial number
+    the fallback is still the radio address, not the database uid."""
+    v = ventilators[0]
+    address = v.raw.fields[0]
+    v.raw.fields[10] = ""  # seriennr empty
+    assert v.serial == str(address)
+
+
 def test_humidity_requires_sensor(ventilators: list[Ventilator]) -> None:
     v = ventilators[0]
     assert v.humidity is not None
