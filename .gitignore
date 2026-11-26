@@ -7,3 +7,5 @@ tests/fixtures/private/
 *.egg-info/
 dist/
 build/
+backup/
+*.img
