@@ -101,11 +101,12 @@ class VarioventFan(VarioventEntity, FanEntity):
         await self._set_mode(OperatingMode.OFF)
 
     def _resume_mode(self) -> str:
-        """Mode to use when switching on: the last one before 'aus', else Normalbetrieb."""
+        """Mode to use when switching on: the device-confirmed mode if it is a real
+        operating mode, else a sensible manual mode."""
         v = self.ventilator
-        previous = v.p(P.MODE_PREVIOUS) if v else None
-        if v and previous in v.allowed_modes and previous != OperatingMode.OFF:
-            return previous
+        confirmed = v.p(P.MODE_CONFIRMED) if v else None
+        if v and confirmed in v.allowed_modes and confirmed != OperatingMode.OFF:
+            return confirmed
         return v.mode_for_fan_level if v else OperatingMode.NORMAL
 
     async def _set_mode(self, mode: str) -> None:

@@ -78,49 +78,51 @@ class R:
 
 
 class LG:
-    """Indices in Lueftungsgeraet (15 fields)."""
+    """Indices in Lueftungsgeraet (15 fields). Names from docs/field-names.md."""
 
-    SERIAL = 0
-    OPERATING_HOURS = 1  # hours since last filter change
-    NAME = 2
-    PARTNER_UID = 5  # DUO partner device
-    PARAMS = 6
-    ROOM_TYPE = 8
-    SERIAL_STR = 10
-    UID = 12
-    DWELLING = 13
+    ADDRESS = 0  # adresse (radio address, not the serial number)
+    OPERATING_HOURS = 1  # betriebsstunden (hours since last filter change)
+    NAME = 2  # bezeichnung
+    PARTNER_UID = 5  # paarisch_zugehoerig_zu_lg_uid (DUO partner device)
+    PARAMS = 6  # parameter
+    ROOM_TYPE = 8  # raumart_string
+    SERIAL = 10  # seriennr
+    UID = 12  # uid
+    DWELLING = 13  # wohneinheit_string
 
 
 class P:
-    """Indices in LueftungsgeraetParameter (155 fields)."""
+    """Indices in LueftungsgeraetParameter (155 fields). Names from docs/field-names.md.
+
+    Index == GWT wire position == alphabetical order of the Java field name.
+    """
 
     # 13-15, 17, 19-23: operating mode settings, see MODE_SETTINGS
-    FEUCHTEABLUFT_ACTIVE = 16
-    MODE_SET = 26  # eingestellte Betriebsart (incl. 'wochenplan' / 'aus')
-    MODE_PREVIOUS = 27
-    MODE_ACTIVE = 28  # aktuell wirksame Betriebsart
-    HUMIDITY = 29
-    HUMIDITY_2 = 30
-    HUMIDITY_SENSOR_MISSING = 32
-    FILTER_INTERVAL = 33  # hours, sign encodes "reset pending"
-    ERROR_FLAG_A = 34
-    SCHEDULES = 54
-    FAN_LEVEL_2 = 108
-    FAN_LEVEL = 109  # Short 0..4, written by the "Lüfterstufe ändern" dialog
-    DEVICE_TYPE = 110
-    AIR_QUALITY_THRESHOLD_MODERATE = 112
-    AIR_QUALITY_THRESHOLD_POOR = 113
-    AIR_QUALITY_SENSOR_PRESENT = 118
-    AIR_QUALITY = 119  # shown by the UI only as traffic light
-    SIGNAL = 127
-    TEMP_INT = 132
-    ERROR_FLAG_B = 133
-    TEMP_FRAC = 134
-    TEMP_SENSOR_PRESENT = 135
-    TEMP2_INT = 136
-    ERROR_FLAG_C = 137
-    TEMP2_FRAC = 138
-    TEMP2_SENSOR_PRESENT = 139
+    MODE_SET = 26  # betriebsart: set mode (incl. 'wochenplan' / 'aus')
+    MODE_CONFIRMED = 27  # betriebsart_ist: mode the device confirmed by radio
+    MODE_SCHEDULE = 28  # betriebsart_wochenplan: mode the weekly schedule dictates
+    HUMIDITY = 29  # feuchte1
+    HUMIDITY_SENSOR_OK = 31  # feuchtesensor1_ok
+    HUMIDITY_2 = 30  # feuchte2
+    FILTER_INTERVAL = 33  # filterwechselintervall (hours, sign encodes "reset pending")
+    FROST_ALARM = 34  # frost_alarm
+    SCHEDULES = 54  # liste_zeitplaene
+    FAN_LEVEL_ACTUAL = 108  # luefter_stufe_ist (confirmed by the device)
+    FAN_LEVEL = 109  # luefter_stufe_soll: target level, written to change the speed
+    DEVICE_TYPE = 110  # luefter_typ
+    AMPEL_THRESHOLD_MODERATE = 112  # luftguete_ampel_rauchsensor_innen_wert1
+    AMPEL_THRESHOLD_POOR = 113  # luftguete_ampel_rauchsensor_innen_wert2
+    AIR_SENSOR_OK = 118  # rauchsensor_innen_ok
+    AIR_QUALITY = 119  # rauchsensor_innen_wert (inner air/smoke sensor reading)
+    SIGNAL = 127  # signalstaerke
+    TEMP_INT = 132  # temperatur1
+    TEMP1_ALARM = 133  # temperatur1_alarm
+    TEMP_FRAC = 134  # temperatur1_nachkomma
+    TEMP_SENSOR_OK = 135  # temperatur1_ok
+    TEMP2_INT = 136  # temperatur2
+    TEMP2_ALARM = 137  # temperatur2_alarm
+    TEMP2_FRAC = 138  # temperatur2_nachkomma
+    TEMP2_SENSOR_OK = 139  # temperatur2_ok
 
 
 DEVICE_TYPES = {
@@ -226,7 +228,13 @@ class Ventilator:
 
     @property
     def serial(self) -> str:
-        return _v(self.raw, LG.SERIAL_STR) or str(_v(self.raw, LG.SERIAL))
+        """Serial number; used as the Home Assistant unique_id.
+
+        The fallback stays the radio address (as before this constant was renamed) so
+        the unique_id of an existing install never changes, and because the address is
+        a stable device property while the uid is only a database row id.
+        """
+        return _v(self.raw, LG.SERIAL) or str(_v(self.raw, LG.ADDRESS))
 
     @property
     def name(self) -> str:
@@ -259,7 +267,11 @@ class Ventilator:
 
     @property
     def active_mode(self) -> str | None:
-        return self.p(P.MODE_ACTIVE)
+        """The mode actually in effect: under a weekly schedule the scheduled mode,
+        otherwise the set mode."""
+        if self.mode == OperatingMode.SCHEDULE:
+            return self.p(P.MODE_SCHEDULE)
+        return self.mode
 
     @property
     def fan_level(self) -> int | None:
@@ -272,18 +284,20 @@ class Ventilator:
     # sensors ------------------------------------------------------------
     @property
     def temperature(self) -> float | None:
-        if self.p(P.TEMP_SENSOR_PRESENT) == 0:
+        if self.p(P.TEMP_SENSOR_OK) == 0:
             return None
         return _temp(self.params, P.TEMP_INT, P.TEMP_FRAC)
 
     @property
     def temperature_2(self) -> float | None:
-        if self.p(P.TEMP2_SENSOR_PRESENT) == 0 or not self.p(P.TEMP2_INT):
+        if self.p(P.TEMP2_SENSOR_OK) == 0 or not self.p(P.TEMP2_INT):
             return None
         return _temp(self.params, P.TEMP2_INT, P.TEMP2_FRAC)
 
     @property
     def humidity(self) -> int | None:
+        if self.p(P.HUMIDITY_SENSOR_OK) == 0:
+            return None
         return self.p(P.HUMIDITY)
 
     @property
@@ -297,7 +311,7 @@ class Ventilator:
 
     @property
     def air_quality(self) -> int | None:
-        if self.p(P.AIR_QUALITY_SENSOR_PRESENT) != 1:
+        if self.p(P.AIR_SENSOR_OK) != 1:
             return None
         value = self.p(P.AIR_QUALITY)
         return value if value is not None and value >= 0 else None
@@ -307,9 +321,9 @@ class Ventilator:
         value = self.air_quality
         if value is None:
             return None
-        if value >= (self.p(P.AIR_QUALITY_THRESHOLD_POOR) or 1200):
+        if value >= (self.p(P.AMPEL_THRESHOLD_POOR) or 1200):
             return AIR_QUALITY_POOR
-        if value >= (self.p(P.AIR_QUALITY_THRESHOLD_MODERATE) or 800):
+        if value >= (self.p(P.AMPEL_THRESHOLD_MODERATE) or 800):
             return AIR_QUALITY_MODERATE
         return AIR_QUALITY_GOOD
 
@@ -339,7 +353,7 @@ class Ventilator:
 
     @property
     def has_error(self) -> bool:
-        return any(self.p(i) == 1 for i in (P.ERROR_FLAG_A, P.ERROR_FLAG_B, P.ERROR_FLAG_C))
+        return any(self.p(i) == 1 for i in (P.FROST_ALARM, P.TEMP1_ALARM, P.TEMP2_ALARM))
 
     # capabilities ---------------------------------------------------------
     def _right(self, idx: int) -> bool:

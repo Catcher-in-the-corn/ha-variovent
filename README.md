@@ -37,9 +37,13 @@ return to the schedule.
 
 ### HACS (recommended)
 
-1. HACS → ⋮ → *Custom repositories* → add this repository, category *Integration*.
-2. Install **Variovent DUO-Live**, restart Home Assistant.
-3. *Settings → Devices & services → Add integration → Variovent DUO-Live*.
+1. In Home Assistant open **HACS** → top right **⋮** → **Custom repositories**.
+2. Repository: `https://github.com/Catcher-in-the-corn/ha-variovent`, type: **Integration** → **Add**.
+3. Search for **Variovent DUO-Live**, open it, **Download**.
+4. Restart Home Assistant.
+5. **Settings → Devices & services → Add integration** → search **Variovent**.
+
+Updates then show up in HACS automatically; a new version is one click away.
 
 ### Manual
 
