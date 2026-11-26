@@ -11,8 +11,25 @@ from .const import DOMAIN, MANUFACTURER
 from .coordinator import VarioventCoordinator
 
 
+def _spot_key(coordinator: VarioventCoordinator) -> str:
+    """Stable key of the spot: the entry's unique_id. Prefix of the spot entities' unique_ids."""
+    return coordinator.config_entry.unique_id or coordinator.config_entry.entry_id
+
+
 def spot_identifier(coordinator: VarioventCoordinator) -> tuple[str, str]:
-    return (DOMAIN, coordinator.config_entry.unique_id or coordinator.config_entry.entry_id)
+    """Device identifier of the spot.
+
+    Prefixed because without a readable spot serial the entry's unique_id is the lowest
+    ventilator serial (config_flow), which is also that ventilator's device identifier.
+    Unprefixed, the ventilator resolved to the spot device and HA refused all its entities
+    ("A device can not be its own via device").
+    """
+    return (DOMAIN, f"spot_{_spot_key(coordinator)}")
+
+
+def legacy_spot_identifier(coordinator: VarioventCoordinator) -> tuple[str, str]:
+    """Spot device identifier up to 0.4.0; migrated in async_setup_entry."""
+    return (DOMAIN, _spot_key(coordinator))
 
 
 def spot_device_info(coordinator: VarioventCoordinator) -> DeviceInfo:
@@ -43,7 +60,7 @@ class VarioventSpotEntity(CoordinatorEntity[VarioventCoordinator]):
 
     def __init__(self, coordinator: VarioventCoordinator, key: str) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = f"{spot_identifier(coordinator)[1]}_{key}"
+        self._attr_unique_id = f"{_spot_key(coordinator)}_{key}"
         self._attr_device_info = spot_device_info(coordinator)
 
 
