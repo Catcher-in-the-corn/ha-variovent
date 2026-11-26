@@ -15,7 +15,7 @@ from .pyvariovent import VarioventClient
 
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
 from .coordinator import VarioventConfigEntry, VarioventCoordinator
-from .entity import spot_device_info
+from .entity import legacy_spot_identifier, spot_device_info, spot_identifier
 
 PLATFORMS = [Platform.BINARY_SENSOR, Platform.FAN, Platform.NUMBER, Platform.SELECT, Platform.SENSOR]
 
@@ -38,7 +38,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: VarioventConfigEntry) ->
     entry.runtime_data = coordinator
 
     # register the spot first so ventilators can reference it as their parent device
-    spot = dr.async_get(hass).async_get_or_create(
+    registry = dr.async_get(hass)
+    _migrate_spot_identifier(registry, entry, coordinator)
+    spot = registry.async_get_or_create(
         config_entry_id=entry.entry_id, **spot_device_info(coordinator)
     )
     coordinator.spot_device_id = spot.id
@@ -46,6 +48,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: VarioventConfigEntry) ->
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
+
+
+def _migrate_spot_identifier(
+    registry: dr.DeviceRegistry, entry: VarioventConfigEntry, coordinator: VarioventCoordinator
+) -> None:
+    """Move the spot device of an install <= 0.4.0 to the prefixed identifier.
+
+    Keeps the device (id, area, name) so nothing changes for the user. Only the spot can
+    hold the old identifier: it is the only device of the entry without a parent, and a
+    ventilator with that serial was refused by HA before.
+    """
+    if _find_device(registry, spot_identifier(coordinator), entry.entry_id):
+        return
+    old = _find_device(registry, legacy_spot_identifier(coordinator), entry.entry_id)
+    if old and old.via_device_id is None:
+        registry.async_update_device(old.id, new_identifiers={spot_identifier(coordinator)})
+
+
+def _find_device(
+    registry: dr.DeviceRegistry, identifier: tuple[str, str], entry_id: str
+) -> dr.DeviceEntry | None:
+    """Device of this entry with the identifier (HA >= 2026.10 has a per-entry lookup)."""
+    if hasattr(registry, "async_get_device_by_identifier"):
+        return registry.async_get_device_by_identifier(identifier, entry_id)
+    device = registry.async_get_device(identifiers={identifier})
+    return device if device and entry_id in device.config_entries else None
 
 
 async def _async_reload(hass: HomeAssistant, entry: VarioventConfigEntry) -> None:

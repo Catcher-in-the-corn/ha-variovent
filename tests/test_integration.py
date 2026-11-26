@@ -9,6 +9,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, STATE_U
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.variovent.const import DOMAIN
@@ -16,8 +17,8 @@ from custom_components.variovent.const import DOMAIN
 USER_INPUT = {CONF_HOST: "192.0.2.10", CONF_USERNAME: "admin", CONF_PASSWORD: "secret"}
 
 
-async def _setup(hass: HomeAssistant) -> MockConfigEntry:
-    entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT, unique_id="0000000001")
+async def _setup(hass: HomeAssistant, unique_id: str = "0000000001") -> MockConfigEntry:
+    entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT, unique_id=unique_id)
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
@@ -84,6 +85,49 @@ async def test_setup_creates_devices_and_entities(hass: HomeAssistant, fake_spot
 
     filter_due = [e for e in hass.states.async_entity_ids("binary_sensor") if "filter" in e]
     assert sum(hass.states.get(e).state == "on" for e in filter_due) == 3
+
+
+# Without a readable spot serial the entry's unique_id is the lowest ventilator serial
+# (see test_config_flow_restricted_user_without_spot_details).
+VENTILATOR_SERIAL_AS_ID = "900000000001"
+
+
+async def test_setup_without_spot_serial_keeps_all_ventilators(hass: HomeAssistant, fake_spot) -> None:
+    """The spot's device must not take the identifier of the ventilator whose serial it borrows."""
+    entry = await _setup(hass, VENTILATOR_SERIAL_AS_ID)
+
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    assert len(devices) == 8  # spot + 7 ventilators
+    spot = next(d for d in devices if d.via_device_id is None)
+    assert all(d.via_device_id == spot.id for d in devices if d is not spot)
+    assert (DOMAIN, VENTILATOR_SERIAL_AS_ID) not in spot.identifiers
+    assert len(hass.states.async_entity_ids("fan")) == 7
+
+
+async def test_old_spot_device_is_migrated(hass: HomeAssistant, fake_spot) -> None:
+    """An install from <= 0.4.0 keeps its spot device (id, area) under the new identifier."""
+    entry = MockConfigEntry(domain=DOMAIN, data=USER_INPUT, unique_id=VENTILATOR_SERIAL_AS_ID)
+    entry.add_to_hass(hass)
+    reg = dr.async_get(hass)
+    old = reg.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, VENTILATOR_SERIAL_AS_ID)},
+        manufacturer="Variovent", model="DUO-Live Spot", name="Variovent Spot",
+    )
+    reg.async_update_device(old.id, area_id="technik")
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    spot = reg.async_get(old.id)
+    assert spot.identifiers == {(DOMAIN, f"spot_{VENTILATOR_SERIAL_AS_ID}")}
+    assert spot.area_id == "technik"
+    devices = dr.async_entries_for_config_entry(reg, entry.entry_id)
+    assert len(devices) == 8
+    assert all(d.via_device_id == spot.id for d in devices if d.id != spot.id)
+    # spot entities keep their unique_id (same entity ids, history stays) and stay on the spot
+    ent = er.async_get(hass)
+    eid = ent.async_get_entity_id("sensor", DOMAIN, f"{VENTILATOR_SERIAL_AS_ID}_error_count")
+    assert eid is not None
+    assert ent.async_get(eid).device_id == spot.id
 
 
 def _sent(calls, method: str) -> list:
