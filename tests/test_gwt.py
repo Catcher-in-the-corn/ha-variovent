@@ -81,6 +81,29 @@ def test_air_quality_level(ventilators: list[Ventilator]) -> None:
     assert v.air_quality_level == AIR_QUALITY_MODERATE
 
 
+def test_active_mode(ventilators: list[Ventilator]) -> None:
+    """Active mode = scheduled mode under a weekly schedule, else the set mode."""
+    for v in ventilators:
+        if v.mode == OperatingMode.SCHEDULE:
+            assert v.active_mode == v.p(28)  # betriebsart_wochenplan, the concrete mode
+            assert v.active_mode != OperatingMode.SCHEDULE
+        else:
+            assert v.active_mode == v.mode  # e.g. an off device is actively off
+
+
+def test_serial_is_serial_not_radio_address(ventilators: list[Ventilator]) -> None:
+    for v in ventilators:
+        assert v.serial == v.raw.fields[10]  # seriennr, not adresse (field 0)
+        assert v.serial != str(v.raw.fields[0])
+
+
+def test_humidity_requires_sensor(ventilators: list[Ventilator]) -> None:
+    v = ventilators[0]
+    assert v.humidity is not None
+    v.params.fields[31] = type(v.params.fields[31])(0)  # feuchtesensor1_ok = 0
+    assert v.humidity is None
+
+
 def _reread(payload: str) -> list:
     """Decode a request payload with the reader by turning it into response form."""
     tokens = payload.rstrip("|").split("|")
